@@ -1,6 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+"""
+velocity field for a steady, fully developed, laminar Newtonian fluid in a pipe. 
+"""
+
 r_num_nodes = 10
 z_num_nodes= 10
 
@@ -14,12 +18,12 @@ dr = R / r_num_nodes
 
 mu = 0.001 #Pa·s
 
-dp_dz = (P_in - P_out)/(L)
+P_drop_length = (P_in - P_out)/(L)
 
-u = lambda r: (1/(4*mu))*(dp_dz)*(R**2 - r**2)
+u = lambda r: (1/(4*mu))*(P_drop_length)*(R**2 - r**2)
 
-r_nodes = np.linspace(0, R, r_num_nodes)
-z_nodes = np.linspace(0, L, z_num_nodes)
+r_nodes = np.linspace(0, R, r_num_nodes-1)
+z_nodes = np.linspace(0, L, z_num_nodes-1)
 u_values = [u(r) for r in r_nodes]
 
 plt.plot(u_values,r_nodes, linewidth=2)
