@@ -1,0 +1,58 @@
+# ==========================================
+# Virtual Environments (Python / venv)
+# ==========================================
+.venv/
+venv/
+ENV/
+env/
+# Python build artifacts and caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# ==========================================
+# Visual Studio Code Generated Files
+# ==========================================
+.vscode/
+# If you want to share specific workspace tools with your team, 
+# you can un-ignore them by removing the '#' from the lines below:
+# !.vscode/extensions.json
+# !.vscode/launch.json
+# !.vscode/tasks.json
+# !.vscode/settings.json
+
+# Local history extension data
+.history/
+*.code-workspace
+
+# ==========================================
+# Environment Variables & Secrets
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ==========================================
+# Operating System Files
+# ==========================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ==========================================
+# Logs and Runtime Files
+# ==========================================
+*.log
+logs/
+*.tmp
+*.temp
