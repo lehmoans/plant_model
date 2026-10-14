@@ -34,6 +34,8 @@ z_nodes = np.linspace(0, L, z_num_nodes-1)
 u_values = [u(r) for r in r_nodes]
 u_p_values = [u_p(r) for r in r_nodes]
 
+press
+
 
 # abs_diff = [abs(u_values[i]-u_p_values[i]) for i in range(len(u_values))]
 # plt.plot(abs_diff,r_nodes, linewidth=2)
