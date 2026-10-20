@@ -1,317 +1,389 @@
-import numpy as np
-import matplotlib.pyplot as plt
+"""Steady laminar flow through a branched plant hydraulic network.
+
+Each branch is modeled as a Poiseuille resistance. The solved variable is
+hydraulic potential phi = p + rho*g*z, and positive Q follows the branch's
+declared direction (node_a -> node_b).
+"""
+from __future__ import annotations
+
 import math
+from typing import Any
 
-mu = 1e-3
-rho = 1000
-g = 9.81
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Patch
 
-P_root_tip = 0
-P_leaf_tip = 0
+MU = 1e-3       # Dynamic viscosity [Pa s]
+RHO = 1000.0    # Fluid density [kg/m^3]
+G = 9.81        # Gravitational acceleration [m/s^2]
 
-# Nodes: pressure is known at boundaries; otherwise None.
-nodes = {
-    #above ground
-    1:{
-        1: {
-            "m": {"p": None, "z": 0.0},
-        },
-        2:{
-            "n1": {"p": None, "z": 0.0},
-            "n2": {"p": None, "z": 0.0},
+P_ROOT_TIP = 0.0
+P_LEAF_TIP = 0.0
+
+# Nodes are grouped by region/order. A known pressure marks a boundary node;
+# p=None marks an internal junction whose potential is solved for.
+NODE_TREE = {
+    # Above ground
+    1: {
+        1: {"m": {"p": None, "z": None}},
+        2: {
+            "n1": {"p": None, "z": None},
+            "n2": {"p": None, "z": None},
         },
         3: {
-            "n11": {"p": P_leaf_tip, "z": 0.0},
-                        "n12": {"p": P_leaf_tip, "z": 0.0},
-                    
-                        "n21": {"p": P_leaf_tip, "z": 0.0},
-                        "n22": {"p": P_leaf_tip, "z": 0.0},
+            "n11": {"p": P_LEAF_TIP, "z": None},
+            "n12": {"p": P_LEAF_TIP, "z": None},
+            "n21": {"p": P_LEAF_TIP, "z": None},
+            "n22": {"p": P_LEAF_TIP, "z": None},
         },
     },
-    #ground
-    0: {
-         "g": {"p": None, "z": 0.0},
+    # Ground
+    0: {"g": {"p": None, "z": None}},
+    # Below ground
+    -1: {
+        1: {"k": {"p": None, "z": None}},
+        2: {
+            "j1": {"p": None, "z": None},
+            "j2": {"p": None, "z": None},
+        },
+        3: {
+            "j11": {"p": P_ROOT_TIP, "z": None},
+            "j12": {"p": P_ROOT_TIP, "z": None},
+            "j21": {"p": P_ROOT_TIP, "z": None},
+            "j22": {"p": P_ROOT_TIP, "z": None},
+        },
     },
-    #below ground
-    -1:{
-        1:{
-             "k":   {"p": None,  "z": None},
-        },
-        2:{
-            "j1":   {"p": None,  "z": None},
-            "j2": {"p": None,   "z": None},
-        },
-        3:{
-            "j11": {"p": P_root_tip,   "z": None},
-            "j12": {"p": P_root_tip,   "z": None},
-            "j21": {"p": P_root_tip,   "z": None},
-            "j22": {"p": P_root_tip,   "z": None},
-        },
-        },
-    }
-
-        # Branch: (node_a, node_b, length_m, radius_m, theta_deg)
-        # theta is measured from horizontal, positive upward from a to b.
-branches = [
-            ("n1", "n11",   0.10, 0.0020, 45),
-            ("n1", "n12",   0.10, 0.0020, 90),
-        
-            ("n2", "n21",   0.10, 0.0020, 90),
-            ("n2", "n22",   0.10, 0.0020, 135),
-        
-            ("n2", "m",   0.10, 0.0020, -25),
-            ("n1", "m",   0.10, 0.0020, -130),
-        
-            ("m", "g",   0.10, 0.0020, -90),
-        
-            ("g", "k",   0.10, 0.0020, 270),
-            
-            ("k",   "j1",   0.15, 0.0015, 225),
-            ("k",   "j2", 0.20, 0.0010, -45),
-        
-            ("j1",   "j11", 0.1, 0.0010, -135),
-            ("j1",   "j12", 0.1, 0.0010, -45),
-        
-            ("j2",   "j21", 0.1, 0.0010, -135),
-            ("j2",   "j22", 0.1, 0.0010, -45),
-   
-]
-
-########### DRAWING PLANT ################
-
-# 1. Calculate coordinates independently of branch order.
-# Seed one node; all other positions follow from branch geometry.
-positions = {"g": (0.0, 0.0)}
-pending = branches.copy()
-
-while pending:
-    progressed = False
-    remaining = []
-
-    for a, b, length, radius, angle_deg in pending:
-        theta = math.radians(angle_deg)
-        dx = length * math.cos(theta)
-        dz = length * math.sin(theta)
-
-        if a in positions and b not in positions:
-            xa, za = positions[a]
-            positions[b] = (xa + dx, za + dz)
-            progressed = True
-
-        elif b in positions and a not in positions:
-            xb, zb = positions[b]
-            positions[a] = (xb - dx, zb - dz)
-            progressed = True
-
-        elif a not in positions and b not in positions:
-            remaining.append(
-                (a, b, length, radius, angle_deg)
-            )
-
-    pending = remaining
-
-    if not progressed:
-        break
-
-if pending:
-    raise ValueError(
-        f"Could not position all nodes: {pending}"
-    )
-
-# 2. Plot branches, scaling line width by radius.
-max_radius = max(branch[3] for branch in branches)
-
-fig, ax = plt.subplots(figsize=(10, 8))
-
-for a, b, length, radius, angle_deg in branches:
-    xa, za = positions[a]
-    xb, zb = positions[b]
-
-    width = 1.5 + (radius / max_radius) * 5.5
-
-    ax.plot(
-        [xa, xb],
-        [za, zb],
-        linewidth=width,
-        solid_capstyle="round",
-    )
-
-# 3. Plot and label nodes.
-for node, (x, z) in positions.items():
-    ax.scatter(x, z, s=28, zorder=3)
-    ax.annotate(
-        node,
-        (x, z),
-        xytext=(4, 4),
-        textcoords="offset points",
-        fontsize=9,
-    )
-
-ax.set_title("Tree Hydraulic Network")
-ax.set_xlabel("Horizontal position (m)")
-ax.set_ylabel("Vertical position (m)")
-ax.set_aspect("equal", adjustable="datalim")
-ax.grid(True, alpha=0.25)
-
-plt.tight_layout()
-#plt.show()
-
-# Set elevations from the root along the tree.
-# This assumes each node has one parent branch.
-nodes["g"]["z"] = 0.0
-
-for a, b, L, r, theta_deg in branches:
-    if nodes[a]["z"] is not None:
-        nodes[b]["z"] = (
-            nodes[a]["z"] + L * np.sin(np.deg2rad(theta_deg))
-        )
-
-
-# Hydraulic resistance of each branch
-R = [
-    8 * mu * L / (np.pi * r**4)
-    for a, b, L, r, theta in branches
-]
-
-# Known hydraulic potentials (BCs)
-phi = {
-    name: node["p"] + rho * g * node["z"]
-    for name, node in nodes.items()
-    if node["p"] is not None
 }
 
-unknown = [name for name in nodes if nodes[name]["p"] is None]
-idx = {name: i for i, name in enumerate(unknown)}
-n = len(unknown)
+# Branch: (node_a, node_b, length_m, radius_m, theta_deg)
+# theta is measured from horizontal, positive upward from a to b.
+BRANCHES = [
+    ("n1", "n11", 0.10, 0.0020, 45),
+    ("n1", "n12", 0.10, 0.0020, 90),
+    ("n2", "n21", 0.10, 0.0020, 90),
+    ("n2", "n22", 0.10, 0.0020, 135),
+    ("n2", "m", 0.10, 0.0020, -25),
+    ("n1", "m", 0.10, 0.0020, -130),
+    ("m", "g", 0.10, 0.0020, -90),
+    ("g", "k", 0.10, 0.0020, 270),
+    ("k", "j1", 0.15, 0.0015, 225),
+    ("k", "j2", 0.20, 0.0010, -45),
+    ("j1", "j11", 0.10, 0.0010, -135),
+    ("j1", "j12", 0.10, 0.0010, -45),
+    ("j2", "j21", 0.10, 0.0010, -135),
+    ("j2", "j22", 0.10, 0.0010, -45),
+]
 
-A = np.zeros((n, n))
-b_vec = np.zeros(n)
 
-# Build conservation equations at each internal junction
-for (a, b, L, r, theta), resistance in zip(branches, R):
-    G = 1 / resistance
+def flatten_nodes(node_tree: dict[Any, Any]) -> dict[str, dict[str, float | None]]:
+    """Flatten the nested node tree to {node_name: {p, z}}."""
+    flattened: dict[str, dict[str, float | None]] = {}
 
-    for node, other in [(a, b), (b, a)]:
-        #checks for forward pair (downstream) and backward pair (upstream)
-        if node not in idx:
-            continue
+    def visit(branch: dict[Any, Any]) -> None:
+        for key, value in branch.items():
+            if not isinstance(value, dict):
+                continue
+            if "p" in value and "z" in value:
+                name = str(key)
+                if name in flattened:
+                    raise ValueError(f"Duplicate node name: {name}")
+                flattened[name] = {"p": value["p"], "z": value["z"]}
+            else:
+                visit(value)
 
-        i = idx[node]
-        A[i, i] += G #diag: G values on nodes that are linked to current unknown node
+    visit(node_tree)
+    return flattened
 
-        if other in idx:
-            A[i, idx[other]] -= G #off-diag: G values on nodes that are linked to other unknown nodes
+
+def calculate_positions(
+    branches: list[tuple[str, str, float, float, float]],
+    seed_node: str = "g",
+    seed_position: tuple[float, float] = (0.0, 0.0),
+) -> dict[str, tuple[float, float]]:
+    """Calculate (x, z) coordinates from branch lengths and angles."""
+    positions = {seed_node: seed_position}
+    pending = list(branches)
+
+    while pending:
+        progressed = False
+        remaining = []
+
+        for a, b, length, _radius, angle_deg in pending:
+            theta = math.radians(angle_deg)
+            dx = length * math.cos(theta)
+            dz = length * math.sin(theta)
+
+            if a in positions and b not in positions:
+                xa, za = positions[a]
+                positions[b] = (xa + dx, za + dz)
+                progressed = True
+            elif b in positions and a not in positions:
+                xb, zb = positions[b]
+                positions[a] = (xb - dx, zb - dz)
+                progressed = True
+            elif a in positions and b in positions:
+                # This edge has already been geometrically determined.
+                continue
+            else:
+                remaining.append((a, b, length, _radius, angle_deg))
+
+        pending = remaining
+        if not progressed and pending:
+            raise ValueError(
+                "Could not position all nodes. Check that every branch is "
+                f"connected to seed node {seed_node!r}: {pending}"
+            )
+
+    return positions
+
+
+def solve_network(
+    node_tree: dict[Any, Any] = NODE_TREE,
+    branches: list[tuple[str, str, float, float, float]] = BRANCHES,
+    mu: float = MU,
+    rho: float = RHO,
+    gravity: float = G,
+) -> dict[str, Any]:
+    """Solve node hydraulic potentials and branch flow rates."""
+    node_data = flatten_nodes(node_tree)
+    positions = calculate_positions(branches)
+
+    branch_nodes = {name for a, b, *_ in branches for name in (a, b)}
+    missing = branch_nodes - set(node_data)
+    if missing:
+        raise ValueError(f"Branches reference undefined nodes: {sorted(missing)}")
+
+    unconnected = set(node_data) - branch_nodes
+    if unconnected:
+        raise ValueError(f"Nodes are not connected to any branch: {sorted(unconnected)}")
+
+    # Use geometry-derived elevations consistently in the gravity term.
+    for name, (_x, z) in positions.items():
+        node_data[name]["z"] = z
+
+    resistance = np.asarray(
+        [8.0 * mu * length / (math.pi * radius**4)
+         for _a, _b, length, radius, _theta in branches],
+        dtype=float,
+    )
+    if np.any(resistance <= 0.0) or not np.all(np.isfinite(resistance)):
+        raise ValueError("Every branch must have positive, finite resistance.")
+
+    phi: dict[str, float] = {
+        name: float(node["p"]) + rho * gravity * float(node["z"])
+        for name, node in node_data.items()
+        if node["p"] is not None
+    }
+    unknown = [name for name, node in node_data.items() if node["p"] is None]
+    index = {name: i for i, name in enumerate(unknown)}
+
+    matrix = np.zeros((len(unknown), len(unknown)), dtype=float)
+    rhs = np.zeros(len(unknown), dtype=float)
+
+    # Kirchhoff-style flow balance: sum of signed branch flows = 0
+    # at each unknown/internal junction.
+    for (a, b, _length, _radius, _theta), r_branch in zip(branches, resistance):
+        conductance = 1.0 / r_branch
+        for node, other in ((a, b), (b, a)):
+            if node not in index:
+                continue
+            i = index[node]
+            matrix[i, i] += conductance
+            if other in index:
+                matrix[i, index[other]] -= conductance
+            else:
+                rhs[i] += conductance * phi[other]
+
+    if unknown:
+        try:
+            solution = np.linalg.solve(matrix, rhs)
+        except np.linalg.LinAlgError as exc:
+            raise ValueError(
+                "Could not solve the network. Check boundary conditions and connectivity."
+            ) from exc
+        phi.update({name: float(value) for name, value in zip(unknown, solution)})
+
+    pressures = {
+        name: phi[name] - rho * gravity * float(node["z"])
+        for name, node in node_data.items()
+    }
+    flows = np.asarray(
+        [(phi[a] - phi[b]) / r_branch
+         for (a, b, _length, _radius, _theta), r_branch in zip(branches, resistance)],
+        dtype=float,
+    )
+
+    return {
+        "nodes": node_data,
+        "positions": positions,
+        "phi": phi,
+        "pressures": pressures,
+        "resistances": resistance,
+        "flows": flows,
+        "branches": branches,
+    }
+
+
+def check_mass_conservation(
+    node_data: dict[str, dict[str, float | None]],
+    branches: list[tuple[str, str, float, float, float]],
+    flows: np.ndarray,
+    rtol: float = 1e-8,
+    atol: float = 1e-12,
+) -> list[dict[str, Any]]:
+    """Return signed flow-balance residuals; positive net means net outflow."""
+    net_outflow = {name: 0.0 for name in node_data}
+    sum_abs_flow = {name: 0.0 for name in node_data}
+
+    for (a, b, *_), q in zip(branches, flows):
+        # q > 0 means flow follows a -> b.
+        net_outflow[a] += float(q)
+        net_outflow[b] -= float(q)
+        sum_abs_flow[a] += abs(float(q))
+        sum_abs_flow[b] += abs(float(q))
+
+    report = []
+    for name, node in node_data.items():
+        residual = net_outflow[name]
+        scale = sum_abs_flow[name]
+        is_internal = node["p"] is None
+        tolerance = atol + rtol * scale
+        report.append({
+            "node": name,
+            "net_outflow": residual,
+            "relative_residual": abs(residual) / scale if scale > 0.0 else 0.0,
+            "is_internal": is_internal,
+            "passed": abs(residual) <= tolerance if is_internal else None,
+            "tolerance": tolerance,
+        })
+    return report
+
+
+def flow_direction_color(
+    a: str,
+    b: str,
+    q: float,
+    positions: dict[str, tuple[float, float]],
+    flow_tol: float = 1e-15,
+    vertical_tol: float = 1e-12,
+) -> str:
+    """Green for upward flow, red for downward flow, grey for zero/horizontal."""
+    if abs(q) <= flow_tol:
+        return "0.55"
+
+    source, target = (a, b) if q > 0.0 else (b, a)
+    dz = positions[target][1] - positions[source][1]
+    if dz > vertical_tol:
+        return "tab:green"
+    if dz < -vertical_tol:
+        return "tab:red"
+    return "0.55"
+
+
+def plot_flow_results(results: dict[str, Any]) -> None:
+    """Plot the network with branch colour showing actual vertical flow direction."""
+    branches = results["branches"]
+    positions = results["positions"]
+    flows = results["flows"]
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    max_flow = float(np.max(np.abs(flows))) if len(flows) else 0.0
+    if max_flow == 0.0:
+        max_flow = 1.0
+
+    for (a, b, _length, _radius, _theta), q in zip(branches, flows):
+        xa, za = positions[a]
+        xb, zb = positions[b]
+        colour = flow_direction_color(a, b, float(q), positions)
+        width = 1.0 + 5.0 * abs(float(q)) / max_flow
+        ax.plot([xa, xb], [za, zb], linewidth=width, color=colour,
+                solid_capstyle="round", zorder=1)
+
+        # Arrow follows the actual flow, not necessarily the listed branch direction.
+        if q >= 0.0:
+            source, target = (xa, za), (xb, zb)
         else:
-            b_vec[i] += G * phi[other] #constants
+            source, target = (xb, zb), (xa, za)
+        fraction = 0.55
+        back_fraction = 0.43
+        ax.annotate(
+            "",
+            xy=(source[0] + fraction * (target[0] - source[0]),
+                source[1] + fraction * (target[1] - source[1])),
+            xytext=(source[0] + back_fraction * (target[0] - source[0]),
+                    source[1] + back_fraction * (target[1] - source[1])),
+            arrowprops={"arrowstyle": "->", "color": "black", "lw": 1.1},
+            zorder=2,
+        )
 
-solution = np.linalg.solve(A, b_vec)
+        ax.text(
+            (xa + xb) / 2.0, (za + zb) / 2.0, f"{q:.2e}",
+            fontsize=8, ha="center", va="center",
+            bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+            zorder=3,
+        )
 
-for name, value in zip(unknown, solution):
-    phi[name] = value
+    for name, (x, z) in positions.items():
+        ax.scatter(x, z, s=20, color="black", zorder=4)
+        ax.annotate(name, (x, z), xytext=(4, 4),
+                    textcoords="offset points", fontsize=8)
 
-# Recover pressures and calculate flows
-print("Node results:")
-for name, node in nodes.items():
-    p = phi[name] - rho * g * node["z"]
-    print(f"{name}: z={node['z']:.4f} m, p={p:.2f} Pa")
-
-Q_values = []
-print("\nBranch results:")
-for (a, b, L, r, theta), resistance in zip(branches, R):
-    Q = (phi[a] - phi[b]) / resistance
-    print(f"{a} -> {b}: theta={theta}°, Q={Q:.6e} m^3/s")
-    Q_values.append(Q)
-
-
+    ax.legend(handles=[
+        Patch(color="tab:green", label="Upward flow"),
+        Patch(color="tab:red", label="Downward flow"),
+        Patch(color="0.55", label="Horizontal / near-zero flow"),
+    ], loc="best")
+    ax.set_title("Flow Rates Through the Plant Network")
+    ax.set_xlabel("Horizontal position (m)")
+    ax.set_ylabel("Vertical position (m)")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.grid(True, alpha=0.25)
+    plt.tight_layout()
+    plt.show()
 
 
-#plotting results
+def main() -> None:
+    results = solve_network()
+    nodes = results["nodes"]
+    branches = results["branches"]
+    flows = results["flows"]
 
-# Q_values[i] corresponds to branches[i]
-Q_values = np.asarray(Q_values, dtype=float)
+    print("Node results:")
+    for name in nodes:
+        print(
+            f"{name}: z={nodes[name]['z']:.4f} m, "
+            f"p={results['pressures'][name]:.6g} Pa, "
+            f"phi={results['phi'][name]:.6g} Pa"
+        )
 
-fig, ax = plt.subplots(figsize=(10, 8))
+    print("\nBranch flow results (positive follows listed a -> b):")
+    for (a, b, _length, _radius, theta), q in zip(branches, flows):
+        print(f"{a} -> {b}: theta={theta:g} deg, Q={q:.6e} m^3/s")
 
-max_Q = np.max(np.abs(Q_values))
-if max_Q == 0:
-    max_Q = 1.0  # avoid division by zero
+    print("\nMass conservation check (internal junctions only):")
+    report = check_mass_conservation(nodes, branches, flows)
+    failed = []
+    for item in report:
+        if item["is_internal"]:
+            status = "PASS" if item["passed"] else "FAIL"
+            print(
+                f"{item['node']}: {status}, net outflow={item['net_outflow']:.3e} "
+                f"m^3/s, relative residual={item['relative_residual']:.3e}"
+            )
+            if not item["passed"]:
+                failed.append(item["node"])
 
-for i, (a, b, length, radius, theta_deg) in enumerate(branches):
-    xa, za = positions[a]
-    xb, zb = positions[b]
-    Q = Q_values[i]
-
-    # Thicker lines indicate larger flow magnitude
-    width = 1.0 + 5.0 * abs(Q) / max_Q
-
-    ax.plot(
-        [xa, xb], [za, zb],
-        linewidth=width,
-        color="tab:blue" if Q >= 0 else "tab:orange",
-        solid_capstyle="round",
+    boundary_net = sum(
+        item["net_outflow"] for item in report if not item["is_internal"]
     )
+    print(f"Boundary flow imbalance: {boundary_net:.3e} m^3/s")
+    if failed:
+        print(f"WARNING: mass conservation failed at: {', '.join(failed)}")
+    else:
+        print("All internal junctions satisfy mass conservation within tolerance.")
 
-    # Arrow points in the actual flow direction
-    dx = xb - xa
-    dz = zb - za
+    plot_flow_results(results)
 
-    if Q < 0:
-        xa, za = xb, zb
-        dx, dz = -dx, -dz
 
-    # Place arrow near the middle of the branch
-    fraction = 0.55
-    ax.annotate(
-        "",
-        xy=(xa + fraction * dx, za + fraction * dz),
-        xytext=(xa + (fraction - 0.12) * dx,
-                za + (fraction - 0.12) * dz),
-        arrowprops=dict(
-            arrowstyle="->",
-            color="black",
-            lw=1.2,
-        ),
-    )
-
-    # Label flow rate near branch midpoint
-    xm = (positions[a][0] + positions[b][0]) / 2
-    zm = (positions[a][1] + positions[b][1]) / 2
-
-    ax.text(
-        xm, zm,
-        f"{Q:.2e}",
-        fontsize=8,
-        ha="center",
-        va="center",
-        bbox=dict(facecolor="white", alpha=0.8, edgecolor="none"),
-    )
-
-# Plot and label nodes
-for node, (x, z) in positions.items():
-    ax.scatter(x, z, s=20, color="black", zorder=3)
-    ax.annotate(
-        node, (x, z),
-        xytext=(4, 4),
-        textcoords="offset points",
-        fontsize=8,
-    )
-
-ax.set_title("Flow Rates Through the Plant Network")
-ax.set_xlabel("Horizontal position (m)")
-ax.set_ylabel("Vertical position (m)")
-ax.set_aspect("equal", adjustable="datalim")
-ax.grid(True, alpha=0.25)
-
-plt.tight_layout()
-plt.show()
-
-"""
-- adjust the code for the new node dictionary
-
-- mass conservtion at each node
-- deriving min energy needed to drive water upward flow
-    - energy dissipation due to resistence
-        - find total resistence
-    - energy lost to overcoming gravitational effects
-        - find total gravitation effects-
-"""
+if __name__ == "__main__":
+    main()
