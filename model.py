@@ -222,15 +222,6 @@ for (a, b, L, r, theta), resistance in zip(branches, R):
     print(f"{a} -> {b}: theta={theta}°, Q={Q:.6e} m^3/s")
     Q_values.append(Q)
 
-linked_nodes
-for node in nodes:
-    if nodes[node]["p"] is None:
-        print(node)
-        for a, b, _ , _ , _ in branches:
-            if node == a:
-
-
-        (node_a, node_b, length_m, radius_m, theta_deg)
 
 
 
