@@ -19,6 +19,17 @@ G = 9.81        # Gravitational acceleration [m/s^2]
 
 P_ROOT_TIP = 0.0
 P_LEAF_TIP = 0.0
+CHANNEL_LEN = 1
+CHANNEL_R1 = 2
+CHANNEL_R2 = 1
+CHANNEL_R3 = 0.5
+
+CHANNEL_LEN1 = 2
+CHANNEL_LEN2 = 1
+CHANNEL_LEN3  = 0.5
+
+CHANNEL_LEN = CHANNEL_LEN2
+
 
 # Nodes are grouped by region/order. A known pressure marks a boundary node;
 # p=None marks an internal junction whose potential is solved for.
@@ -58,20 +69,20 @@ NODE_TREE = {
 # Branch: (node_a, node_b, length_m, radius_m, theta_deg)
 # theta is measured from horizontal, positive upward from a to b.
 BRANCHES = [
-    ("n1", "n11", 0.10, 0.0020, 45),
-    ("n1", "n12", 0.10, 0.0020, 90),
-    ("n2", "n21", 0.10, 0.0020, 90),
-    ("n2", "n22", 0.10, 0.0020, 135),
-    ("n2", "m", 0.10, 0.0020, -25),
-    ("n1", "m", 0.10, 0.0020, -130),
-    ("m", "g", 0.10, 0.0020, -90),
-    ("g", "k", 0.10, 0.0020, 270),
-    ("k", "j1", 0.15, 0.0015, 225),
-    ("k", "j2", 0.20, 0.0010, -45),
-    ("j1", "j11", 0.10, 0.0010, -135),
-    ("j1", "j12", 0.10, 0.0010, -45),
-    ("j2", "j21", 0.10, 0.0010, -135),
-    ("j2", "j22", 0.10, 0.0010, -45),
+    ("n1", "n11", CHANNEL_LEN, CHANNEL_R3, 45),
+    ("n1", "n12", CHANNEL_LEN, CHANNEL_R3, 90),
+    ("n2", "n21", CHANNEL_LEN, CHANNEL_R3, 90),
+    ("n2", "n22", CHANNEL_LEN, CHANNEL_R3, 135),
+    ("n2", "m", CHANNEL_LEN, CHANNEL_R2, -25),
+    ("n1", "m", CHANNEL_LEN, CHANNEL_R2, -155),
+    ("m", "g", CHANNEL_LEN, CHANNEL_R1, -90),
+    ("g", "k", CHANNEL_LEN1, CHANNEL_R2, 270),
+    ("k", "j1", CHANNEL_LEN2, CHANNEL_R2, -145),
+    ("k", "j2", CHANNEL_LEN2, CHANNEL_R2, -35),
+    ("j1", "j11", CHANNEL_LEN3, CHANNEL_R2, -135),
+    ("j1", "j12", CHANNEL_LEN3, CHANNEL_R2, -45),
+    ("j2", "j21", CHANNEL_LEN3, CHANNEL_R2, -135),
+    ("j2", "j22", CHANNEL_LEN3, CHANNEL_R2, -45),
 ]
 
 
