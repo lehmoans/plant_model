@@ -230,6 +230,9 @@ def solve_network(
         "phi": phi,
         "pressures": pressures,
         "resistances": resistance,
+        "matrix": matrix.copy(),
+        "rhs": rhs.copy(),
+        "unknowns": list(unknown),
         "flows": flows,
         "branches": branches,
     }
