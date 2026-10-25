@@ -1,15 +1,25 @@
-"""Inverse energy model using the existing network in model.py.
+"""Inverse flow / energy model using the network defined in model.py.
 
-The four root-tip nodes (j11, j12, j21, j22) are held at their existing
-specified pressure, P_ROOT_TIP. A minimum flow demand Q_min is prescribed at
-each leaf tip (n11, n12, n21, n22). Their pressures, along with the internal
-junction potentials, are solved so that each leaf receives its demanded flow.
+Root-tip pressure is fixed at P_ROOT_TIP. A minimum outflow Q_min is prescribed
+at each leaf tip, and the leaf-tip pressures are solved (not fixed). Internal
+junctions satisfy mass conservation. The required steady mechanical power is
+computed as viscous dissipation plus the net rate of gravitational potential
+energy increase.
+
+Numerical stability: solve for hydraulic potential relative to the common root
+potential, rather than subtracting large absolute potentials to obtain tiny
+flows. This changes only the reference level, not the physical solution.
+
+Important boundary-condition note:
+A passive resistance network cannot independently prescribe both pressure and
+flow at every leaf. This model prescribes leaf flows and solves leaf pressures.
+If root and leaf pressures must both be fixed to P0, an explicit pump/active
+source model is needed.
 
 Run from the repository root:
     python inverse_model.py
 
-Q_min is in m^3/s per leaf tip. All geometry, node names, branch angles,
-lengths and radii come from model.py.
+Q_min is in m^3/s per leaf tip. Geometry and branch properties come from model.py.
 """
 
 from __future__ import annotations
@@ -74,13 +84,19 @@ def solve_for_minimum_leaf_flows(
     for name, (_x, z) in positions.items():
         node_data[name]["z"] = z
 
-    # Fixed-pressure boundary nodes are the root tips only. Their hydraulic
-    # potential is phi = p + rho*g*z. Leaf pressures are unknown.
-    fixed_phi = {
-        name: P_ROOT_TIP + RHO * G * float(node_data[name]["z"])
-        for name in ROOT_TIPS
-    }
-    unknowns = [name for name in node_data if name not in fixed_phi]
+    # Fix root potentials to zero in a shifted reference frame. All root tips
+    # share the same elevation in this geometry, so their physical P_ROOT_TIP
+    # gives one common reference potential. Solving relative potentials avoids
+    # cancellation when tiny flows are calculated from large absolute values.
+    root_elevations = [float(node_data[name]["z"]) for name in ROOT_TIPS]
+    if not np.allclose(root_elevations, root_elevations[0], rtol=0.0, atol=VERTICAL_TOL):
+        raise ValueError(
+            "Root tips do not share one elevation; use individual fixed root "
+            "potentials and a numerically stable reference shift."
+        )
+    reference_phi = P_ROOT_TIP + RHO * G * root_elevations[0]
+    fixed_relative_phi = {name: 0.0 for name in ROOT_TIPS}
+    unknowns = [name for name in node_data if name not in fixed_relative_phi]
     index = {name: i for i, name in enumerate(unknowns)}
 
     branch_resistances = []
@@ -94,7 +110,7 @@ def solve_for_minimum_leaf_flows(
 
     # Nodal balance in hydraulic-potential form:
     # sum_j (phi_i - phi_j)/R_ij = -Q_demand at a leaf sink, 0 otherwise.
-    # Known root potentials are moved to the right-hand side.
+    # Root relative potentials are zero, so their RHS contribution is zero.
     for (a, b, *_), resistance in zip(BRANCHES, branch_resistances):
         conductance = 1.0 / resistance
         for node, other in ((a, b), (b, a)):
@@ -105,7 +121,7 @@ def solve_for_minimum_leaf_flows(
             if other in index:
                 matrix[i, index[other]] -= conductance
             else:
-                rhs[i] += conductance * fixed_phi[other]
+                rhs[i] += conductance * fixed_relative_phi[other]
 
     for tip, demand in demands.items():
         rhs[index[tip]] -= demand
@@ -118,8 +134,10 @@ def solve_for_minimum_leaf_flows(
             "and ensure each leaf is hydraulically connected to a fixed-pressure root."
         ) from exc
 
-    phi = dict(fixed_phi)
-    phi.update({name: float(value) for name, value in zip(unknowns, solution)})
+    relative_phi = dict(fixed_relative_phi)
+    relative_phi.update({name: float(value) for name, value in zip(unknowns, solution)})
+    # Restore the physical hydraulic-potential reference only after solving.
+    phi = {name: value + reference_phi for name, value in relative_phi.items()}
     pressures = {
         name: phi[name] - RHO * G * float(node_data[name]["z"])
         for name in node_data
@@ -160,6 +178,9 @@ def solve_for_minimum_leaf_flows(
 
     total_leaf_outflow = sum(demands.values())
     total_power = total_viscous_power + total_gravity_power
+    mass_balance_error = total_root_inflow - total_leaf_outflow
+    mass_balance_scale = max(abs(total_root_inflow), abs(total_leaf_outflow), 1e-30)
+    mass_balance_relative_error = abs(mass_balance_error) / mass_balance_scale
 
     return {
         "q_min_by_leaf": demands,
@@ -167,9 +188,13 @@ def solve_for_minimum_leaf_flows(
         "leaf_tips": LEAF_TIPS,
         "root_inflow": total_root_inflow,
         "total_leaf_demand": total_leaf_outflow,
+        "mass_balance_error": mass_balance_error,
+        "mass_balance_relative_error": mass_balance_relative_error,
         "nodes": node_data,
         "positions": positions,
         "hydraulic_potential": phi,
+        "relative_hydraulic_potential": relative_phi,
+        "reference_hydraulic_potential": reference_phi,
         "pressures": pressures,
         "matrix": matrix,
         "rhs": rhs,
@@ -320,7 +345,11 @@ def print_report(results: dict[str, Any], duration: float = 1.0) -> None:
     print("Inverse plant water-uptake model")
     print(f"Required total leaf uptake : {results['total_leaf_demand']:.6e} m^3/s")
     print(f"Calculated root inflow     : {results['root_inflow']:.6e} m^3/s")
-    print("\nLeaf-tip demand and solved pressure:")
+    print(
+        f"Mass-balance relative error: "
+        f"{results['mass_balance_relative_error']:.3e}"
+    )
+    print("\nLeaf-tip demand and solved pressure (leaf pressure is solved, not fixed):")
     for tip in results["leaf_tips"]:
         print(
             f"  {tip}: Q_min={results['q_min_by_leaf'][tip]:.6e} m^3/s, "
@@ -331,6 +360,7 @@ def print_report(results: dict[str, Any], duration: float = 1.0) -> None:
     print(f"Viscous dissipation power  : {results['total_viscous_power']:.6e} W")
     print(f"Signed gravitational power : {results['total_gravity_power']:.6e} W")
     print(f"Net mechanical power       : {results['net_mechanical_power']:.6e} W")
+    print("  (viscous dissipation + net gravitational potential-energy rate)")
     print(f"Duration                   : {duration:.6g} s")
     print(f"Viscous energy             : {results['total_viscous_power'] * duration:.6e} J")
     print(f"Signed gravity energy      : {results['total_gravity_power'] * duration:.6e} J")
