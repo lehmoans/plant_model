@@ -17,7 +17,9 @@ from __future__ import annotations
 import math
 from typing import Any, Mapping
 
+import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 from model import (
     BRANCHES,
@@ -36,6 +38,13 @@ LEAF_TIPS = ("n11", "n12", "n21", "n22")
 # Minimum required flow at EACH leaf tip [m^3/s].
 # Change this value to explore different uptake requirements.
 Q_MIN = 1.0e-9
+
+# Plot styling. Line widths are in Matplotlib points.
+MIN_LINE_WIDTH = 1.2
+FLOW_WIDTH_PER_QMIN = MIN_LINE_WIDTH
+FRICTION_MIN_WIDTH = MIN_LINE_WIDTH
+FLOW_TOL = 1.0e-18
+VERTICAL_TOL = 1.0e-12
 
 
 def solve_for_minimum_leaf_flows(
@@ -172,6 +181,135 @@ def solve_for_minimum_leaf_flows(
     }
 
 
+def _flow_colour(branch: dict[str, Any], positions: dict[str, tuple[float, float]]) -> str:
+    """Return green for upward flow, red for downward flow, grey for horizontal/zero."""
+    q = branch["flow_rate"]
+    if abs(q) <= FLOW_TOL:
+        return "0.55"
+
+    start, end = branch["start"], branch["end"]
+    # Positive flow follows start -> end; negative flow follows end -> start.
+    source, target = (start, end) if q > 0.0 else (end, start)
+    dz = positions[target][1] - positions[source][1]
+    if dz > VERTICAL_TOL:
+        return "tab:green"
+    if dz < -VERTICAL_TOL:
+        return "tab:red"
+    return "0.55"
+
+
+def _draw_nodes(ax, positions: dict[str, tuple[float, float]]) -> None:
+    """Draw and label the shared network geometry."""
+    for name, (x, z) in positions.items():
+        ax.scatter(x, z, s=20, color="black", zorder=3)
+        ax.annotate(name, (x, z), xytext=(4, 4), textcoords="offset points", fontsize=8)
+
+
+def _finish_network_axes(ax, title: str) -> None:
+    ax.set_title(title)
+    ax.set_xlabel("Horizontal position (m)")
+    ax.set_ylabel("Vertical position (m)")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.grid(True, alpha=0.25)
+
+
+def plot_flow_structure(results: dict[str, Any]) -> None:
+    """Plot branch flow; width is scaled by |Q|/Q_min and colour by vertical direction.
+
+    The reference flow is the smallest positive prescribed leaf demand. Thus a
+    branch carrying one Q_min has the minimum configured width, and branches
+    carrying more flow are drawn proportionally thicker.
+    """
+    branches = results["branches"]
+    positions = results["positions"]
+    positive_demands = [q for q in results["q_min_by_leaf"].values() if q > 0.0]
+    reference_flow = min(positive_demands) if positive_demands else 0.0
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for branch in branches:
+        a, b = branch["start"], branch["end"]
+        xa, za = positions[a]
+        xb, zb = positions[b]
+        q_abs = abs(branch["flow_rate"])
+        if reference_flow > 0.0:
+            width = FLOW_WIDTH_PER_QMIN * q_abs / reference_flow
+        else:
+            width = MIN_LINE_WIDTH
+        width = max(width, 0.25)
+        ax.plot(
+            [xa, xb], [za, zb],
+            linewidth=width,
+            color=_flow_colour(branch, positions),
+            solid_capstyle="round",
+            zorder=1,
+        )
+
+        # Arrow direction follows the solved flow.
+        source, target = ((xa, za), (xb, zb)) if branch["flow_rate"] >= 0.0 else ((xb, zb), (xa, za))
+        ax.annotate(
+            "",
+            xy=(source[0] + 0.58 * (target[0] - source[0]),
+                source[1] + 0.58 * (target[1] - source[1])),
+            xytext=(source[0] + 0.42 * (target[0] - source[0]),
+                    source[1] + 0.42 * (target[1] - source[1])),
+            arrowprops={"arrowstyle": "->", "color": "black", "lw": 1.0},
+            zorder=2,
+        )
+
+    _draw_nodes(ax, positions)
+    ax.legend(handles=[
+        Line2D([0], [0], color="tab:green", lw=2, label="Upward flow"),
+        Line2D([0], [0], color="tab:red", lw=2, label="Downward flow"),
+        Line2D([0], [0], color="0.55", lw=2, label="Horizontal / near-zero flow"),
+    ], loc="best")
+    _finish_network_axes(ax, "Plant Network — Flow Rate")
+    fig.tight_layout()
+
+
+def plot_friction_structure(results: dict[str, Any]) -> None:
+    """Plot viscous frictional power; thickness is normalized to its smallest nonzero value.
+
+    Branch friction is represented by viscous dissipation power P_f = R Q^2.
+    The least-friction branch is drawn at FRICTION_MIN_WIDTH; other branches
+    scale proportionally. This is a visualization scaling, not a pipe-radius
+    or physical diameter calculation.
+    """
+    branches = results["branches"]
+    positions = results["positions"]
+    positive_friction = [b["viscous_power"] for b in branches if b["viscous_power"] > 0.0]
+    reference_friction = min(positive_friction) if positive_friction else 0.0
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+    for branch in branches:
+        a, b = branch["start"], branch["end"]
+        xa, za = positions[a]
+        xb, zb = positions[b]
+        friction = branch["viscous_power"]
+        if reference_friction > 0.0:
+            width = FRICTION_MIN_WIDTH * friction / reference_friction
+        else:
+            width = FRICTION_MIN_WIDTH
+        width = max(width, 0.25)
+        ax.plot(
+            [xa, xb], [za, zb],
+            linewidth=width,
+            color="tab:blue",
+            solid_capstyle="round",
+            zorder=1,
+        )
+
+    _draw_nodes(ax, positions)
+    _finish_network_axes(ax, "Plant Network — Viscous Frictional Power")
+    fig.tight_layout()
+
+
+def plot_results(results: dict[str, Any]) -> None:
+    """Show the flow-direction/flow-rate plot and the friction-power plot."""
+    plot_flow_structure(results)
+    plot_friction_structure(results)
+    plt.show()
+
+
 def print_report(results: dict[str, Any], duration: float = 1.0) -> None:
     """Print required leaf flows, solved pressures, and energy over duration."""
     if duration < 0.0:
@@ -210,6 +348,7 @@ def print_report(results: dict[str, Any], duration: float = 1.0) -> None:
 def main() -> None:
     results = solve_for_minimum_leaf_flows(Q_MIN)
     print_report(results, duration=1.0)
+    plot_results(results)
 
 
 if __name__ == "__main__":
