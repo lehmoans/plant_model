@@ -291,49 +291,64 @@ def plot_flow_structure(results: dict[str, Any]) -> None:
     fig.tight_layout()
 
 
-def plot_friction_structure(results: dict[str, Any]) -> None:
-    """Plot geometry-based friction f = 8*MU*L/(4*pi*r^4).
-
-    Line width is normalized to the smallest friction coefficient in the
-    network. This plot uses only viscosity and branch geometry, with no
-    association with flow rate, pressure, or power.
-    """
+def plot_hydraulic_resistance_network(results: dict[str, Any]) -> None:
+    """Plot branch resistance with a log-scaled colour map and line widths."""
     branches = results["branches"]
     positions = results["positions"]
-    friction_values = [
-        8.0 * MU * branch["length"] / (4.0 * math.pi * branch["radius"]**4)
-        for branch in branches
-    ]
-    reference_friction = min(friction_values) if friction_values else 0.0
-
+    values = np.asarray([b["resistance"] for b in branches], dtype=float)
+    if len(values) == 0 or np.any(values <= 0.0):
+        raise ValueError("All branches must have positive hydraulic resistance.")
+    lo, hi = float(values.min()), float(values.max())
+    log_values = np.log10(values)
+    norm = plt.Normalize(float(log_values.min()), float(log_values.max()) if hi > lo else float(log_values.min()) + 1.0)
+    cmap = plt.get_cmap("viridis")
     fig, ax = plt.subplots(figsize=(10, 8))
-    for branch, friction in zip(branches, friction_values):
+    for branch, lv in zip(branches, log_values):
         a, b = branch["start"], branch["end"]
-        xa, za = positions[a]
-        xb, zb = positions[b]
-
-        if reference_friction > 0.0:
-            width = FRICTION_MIN_WIDTH * friction / reference_friction
-        else:
-            width = FRICTION_MIN_WIDTH
-        width = max(width, 0.25)
-
-        ax.plot(
-            [xa, xb], [za, zb],
-            linewidth=width,
-            color="tab:blue",
-            solid_capstyle="round",
-            zorder=1,
-        )
-
+        xa, za = positions[a]; xb, zb = positions[b]
+        fraction = 0.0 if hi == lo else (lv - log_values.min()) / (log_values.max() - log_values.min())
+        ax.plot([xa, xb], [za, zb], color=cmap(norm(lv)), linewidth=1.2 + 3.0 * fraction,
+                solid_capstyle="round", zorder=1)
+    for branch in sorted(branches, key=lambda b: b["resistance"], reverse=True)[:5]:
+        a, b = branch["start"], branch["end"]
+        xa, za = positions[a]; xb, zb = positions[b]
+        ax.annotate(f"{a}–{b}", ((xa + xb) / 2, (za + zb) / 2), xytext=(3, 5),
+                    textcoords="offset points", fontsize=8,
+                    bbox={"boxstyle": "round,pad=0.2", "fc": "white", "alpha": 0.85, "ec": "none"})
     _draw_nodes(ax, positions)
-    _finish_network_axes(ax, "Plant Network — Geometric Friction Coefficient")
+    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    scalar.set_array([])
+    fig.colorbar(scalar, ax=ax, pad=0.02).set_label(r"Hydraulic resistance $R_i$ (Pa s/m$^3$), log scale")
+    _finish_network_axes(ax, "Plant Network — Hydraulic Resistance by Branch")
     fig.tight_layout()
 
+
+def plot_hydraulic_resistance_ranking(results: dict[str, Any]) -> None:
+    """Rank all branches by hydraulic resistance."""
+    branches = sorted(results["branches"], key=lambda b: b["resistance"])
+    labels = [f'{b["start"]} → {b["end"]}' for b in branches]
+    values = np.asarray([b["resistance"] for b in branches], dtype=float)
+    fig, ax = plt.subplots(figsize=(10, max(5.0, 0.34 * len(branches))))
+    y = np.arange(len(branches))
+    bars = ax.barh(y, values, color=plt.get_cmap("viridis")(np.linspace(0.15, 0.9, len(branches))))
+    ax.set_yticks(y, labels)
+    ax.set_xlabel(r"Hydraulic resistance $R_i$ (Pa s/m$^3$)")
+    ax.set_title("Branch Hydraulic Resistance — Lowest to Highest")
+    ax.set_xscale("log")
+    ax.grid(axis="x", alpha=0.25)
+    ax.set_axisbelow(True)
+    ax.invert_yaxis()
+    for bar, value in zip(bars, values):
+        ax.annotate(f"{value:.2e}", (value, bar.get_y() + bar.get_height() / 2),
+                    xytext=(5, 0), textcoords="offset points", va="center", fontsize=8)
+    fig.tight_layout()
+
+
 def plot_results(results: dict[str, Any]) -> None:
-    """Show the flow-direction/flow-rate plot and frictional-dissipation plot."""
+    """Show the flow plot and both hydraulic-resistance plots."""
     plot_flow_structure(results)
-    plot_friction_structure(results)
+    plot_hydraulic_resistance_network(results)
+    plot_hydraulic_resistance_ranking(results)
     plt.show()
 
 
