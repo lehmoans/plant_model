@@ -21,7 +21,7 @@ mu = 0.001 #Pa·s
 
 density = 2 #kg/m^3
 g = 9.81 #m/s^2
-theta = 0 #degrees
+theta = 0.5 #degrees
 theta_rad = np.radians(theta)
 
 P_drop_length = (P_in - P_out)/(L)
@@ -34,12 +34,11 @@ z_nodes = np.linspace(0, L, z_num_nodes-1)
 u_values = [u(r) for r in r_nodes]
 u_p_values = [u_p(r) for r in r_nodes]
 
-press
-
-
-# abs_diff = [abs(u_values[i]-u_p_values[i]) for i in range(len(u_values))]
-# plt.plot(abs_diff,r_nodes, linewidth=2)
-# plt.show()
+""" 
+abs_diff = [abs(u_values[i]-u_p_values[i]) for i in range(len(u_values))]
+plt.plot(abs_diff,r_nodes, linewidth=2)
+plt.show() 
+"""
 
 plt.plot(u_values,r_nodes, linewidth=2, label = "Pressure + Gravity")
 plt.plot(u_values,-r_nodes, markersize=2)
