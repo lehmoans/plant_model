@@ -267,29 +267,35 @@ def plot_flow_structure(results: dict[str, Any]) -> None:
 
 
 def plot_friction_structure(results: dict[str, Any]) -> None:
-    """Plot viscous frictional power; thickness is normalized to its smallest nonzero value.
+    """Plot branch frictional pressure drop, normalized to the model minimum.
 
-    Branch friction is represented by viscous dissipation power P_f = R Q^2.
-    The least-friction branch is drawn at FRICTION_MIN_WIDTH; other branches
-    scale proportionally. This is a visualization scaling, not a pipe-radius
-    or physical diameter calculation.
+    For each branch, the frictional pressure-drop magnitude is
+    |delta_p_f| = R * |Q|. The branch with the smallest nonzero pressure drop
+    uses FRICTION_MIN_WIDTH; every other branch is scaled by its ratio to that
+    minimum. Zero-flow branches are drawn at the minimum visible width.
     """
     branches = results["branches"]
     positions = results["positions"]
-    positive_friction = [b["viscous_power"] for b in branches if b["viscous_power"] > 0.0]
-    reference_friction = min(positive_friction) if positive_friction else 0.0
+    friction_drops = [
+        abs(branch["pressure_drop_viscous"])
+        for branch in branches
+        if abs(branch["pressure_drop_viscous"]) > 0.0
+    ]
+    reference_friction = min(friction_drops) if friction_drops else 0.0
 
     fig, ax = plt.subplots(figsize=(10, 8))
     for branch in branches:
         a, b = branch["start"], branch["end"]
         xa, za = positions[a]
         xb, zb = positions[b]
-        friction = branch["viscous_power"]
+        friction = abs(branch["pressure_drop_viscous"])
+
         if reference_friction > 0.0:
             width = FRICTION_MIN_WIDTH * friction / reference_friction
         else:
             width = FRICTION_MIN_WIDTH
         width = max(width, 0.25)
+
         ax.plot(
             [xa, xb], [za, zb],
             linewidth=width,
@@ -299,7 +305,7 @@ def plot_friction_structure(results: dict[str, Any]) -> None:
         )
 
     _draw_nodes(ax, positions)
-    _finish_network_axes(ax, "Plant Network — Viscous Frictional Power")
+    _finish_network_axes(ax, "Plant Network — Frictional Pressure Drop")
     fig.tight_layout()
 
 
