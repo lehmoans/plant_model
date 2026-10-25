@@ -42,8 +42,15 @@ from model import (
     flatten_nodes,
 )
 
-ROOT_TIPS = ("j11", "j12", "j21", "j22")
-LEAF_TIPS = ("n11", "n12", "n21", "n22")
+#deriving root/leaf tips as per NODE_TREE structure
+for region in NODE_TREE:
+    if region == 1:
+        max_branch_iter = max(k for k,v in NODE_TREE[region].items())
+        LEAF_TIPS = [k for k,v in NODE_TREE[region][max_branch_iter].items()]
+    elif region == -1:
+        max_branch_iter = max(k for k,v in NODE_TREE[region].items())
+        ROOT_TIPS = [k for k,v in NODE_TREE[region][max_branch_iter].items()]
+
 
 # Minimum required flow at EACH leaf tip [m^3/s].
 # Change this value to explore different uptake requirements.
