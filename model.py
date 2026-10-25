@@ -17,18 +17,19 @@ MU = 1e-3       # Dynamic viscosity [Pa s]
 RHO = 1000.0    # Fluid density [kg/m^3]
 G = 9.81        # Gravitational acceleration [m/s^2]
 
+# BCs
 P_ROOT_TIP = 0.0
 P_LEAF_TIP = 0.0
-CHANNEL_LEN = 1
+
+#above ground, where L = 1
 CHANNEL_R1 = 2
 CHANNEL_R2 = 1
 CHANNEL_R3 = 0.5
 
+#below ground where R = 0.5
 CHANNEL_LEN1 = 2
 CHANNEL_LEN2 = 1
 CHANNEL_LEN3  = 0.5
-
-CHANNEL_LEN = CHANNEL_LEN2
 
 
 # Nodes are grouped by region/order. A known pressure marks a boundary node;
@@ -69,21 +70,23 @@ NODE_TREE = {
 # Branch: (node_a, node_b, length_m, radius_m, theta_deg)
 # theta is measured from horizontal, positive upward from a to b.
 BRANCHES = [
-    ("n1", "n11", CHANNEL_LEN, CHANNEL_R3, 45),
-    ("n1", "n12", CHANNEL_LEN, CHANNEL_R3, 90),
-    ("n2", "n21", CHANNEL_LEN, CHANNEL_R3, 90),
-    ("n2", "n22", CHANNEL_LEN, CHANNEL_R3, 135),
-    ("n2", "m", CHANNEL_LEN, CHANNEL_R2, -25),
-    ("n1", "m", CHANNEL_LEN, CHANNEL_R2, -155),
-    ("m", "g", CHANNEL_LEN, CHANNEL_R1, -90),
-    ("g", "k", CHANNEL_LEN1, CHANNEL_R2, 270),
-    ("k", "j1", CHANNEL_LEN2, CHANNEL_R2, -145),
-    ("k", "j2", CHANNEL_LEN2, CHANNEL_R2, -35),
-    ("j1", "j11", CHANNEL_LEN3, CHANNEL_R2, -135),
-    ("j1", "j12", CHANNEL_LEN3, CHANNEL_R2, -45),
-    ("j2", "j21", CHANNEL_LEN3, CHANNEL_R2, -135),
-    ("j2", "j22", CHANNEL_LEN3, CHANNEL_R2, -45),
+    ("n1", "n11", CHANNEL_LEN1, CHANNEL_R3, 45),
+    ("n1", "n12", CHANNEL_LEN1, CHANNEL_R3, 90),
+    ("n2", "n21", CHANNEL_LEN1, CHANNEL_R3, 90),
+    ("n2", "n22", CHANNEL_LEN1, CHANNEL_R3, 135),
+    ("n2", "m", CHANNEL_LEN1, CHANNEL_R2, -25),
+    ("n1", "m", CHANNEL_LEN1, CHANNEL_R2, -155),
+    ("m", "g", CHANNEL_LEN1, CHANNEL_R1, -90),
+    ("g", "k", CHANNEL_LEN1, CHANNEL_R3, 270),
+    ("k", "j1", CHANNEL_LEN2, CHANNEL_R3, -145),
+    ("k", "j2", CHANNEL_LEN2, CHANNEL_R3, -35),
+    ("j1", "j11", CHANNEL_LEN3, CHANNEL_R3, -135),
+    ("j1", "j12", CHANNEL_LEN3, CHANNEL_R3, -45),
+    ("j2", "j21", CHANNEL_LEN3, CHANNEL_R3, -135),
+    ("j2", "j22", CHANNEL_LEN3, CHANNEL_R3, -45),
 ]
+
+
 
 
 def flatten_nodes(node_tree: dict[Any, Any]) -> dict[str, dict[str, float | None]]:

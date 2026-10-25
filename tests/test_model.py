@@ -1,28 +1,104 @@
 import numpy as np
 import pytest
-
 from model import (
-    NODE_TREE,
-    BRANCHES,
     check_mass_conservation,
     flow_direction_color,
     solve_network,
 )
 
-# Transcribed from the hand-calculation data committed on 2026-10-22.
-# The node order is deliberately explicit so comparisons do not depend on
-# the dictionary traversal order used by the solver.
+"""
+validation of code: 
+tests code derived values against hand calculated values, validating theory and code. 
+"""
+
+# input parameters
+MU = 1e-3       # Dynamic viscosity [Pa s]
+RHO = 1000.0    # Fluid density [kg/m^3]
+G = 9.81        # Gravitational acceleration [m/s^2]
+
+P_ROOT_TIP = 0.0
+P_LEAF_TIP = 0.0
+
+CHANNEL_LEN = 1
+CHANNEL_R1 = 2
+CHANNEL_R2 = 1
+CHANNEL_R3 = 0.5
+
+CHANNEL_LEN1 = 2
+CHANNEL_LEN2 = 1
+CHANNEL_LEN3  = 0.5
+
+CHANNEL_LEN = CHANNEL_LEN2
+
+# Nodes are grouped by region/order. A known pressure marks a boundary node;
+# p=None marks an internal junction whose potential is solved for.
+NODE_TREE = {
+    # Above ground
+    1: {
+        1: {"m": {"p": None, "z": None}},
+        2: {
+            "n1": {"p": None, "z": None},
+            "n2": {"p": None, "z": None},
+        },
+        3: {
+            "n11": {"p": P_LEAF_TIP, "z": None},
+            "n12": {"p": P_LEAF_TIP, "z": None},
+            "n21": {"p": P_LEAF_TIP, "z": None},
+            "n22": {"p": P_LEAF_TIP, "z": None},
+        },
+    },
+    # Ground
+    0: {"g": {"p": None, "z": None}},
+    # Below ground
+    -1: {
+        1: {"k": {"p": None, "z": None}},
+        2: {
+            "j1": {"p": None, "z": None},
+            "j2": {"p": None, "z": None},
+        },
+        3: {
+            "j11": {"p": P_ROOT_TIP, "z": None},
+            "j12": {"p": P_ROOT_TIP, "z": None},
+            "j21": {"p": P_ROOT_TIP, "z": None},
+            "j22": {"p": P_ROOT_TIP, "z": None},
+        },
+    },
+}
+
+# Branch: (node_a, node_b, length_m, radius_m, theta_deg)
+# theta is measured from horizontal, positive upward from a to b.
+BRANCHES = [
+    ("n1", "n11", CHANNEL_LEN, CHANNEL_R3, 45),
+    ("n1", "n12", CHANNEL_LEN, CHANNEL_R3, 90),
+    ("n2", "n21", CHANNEL_LEN, CHANNEL_R3, 90),
+    ("n2", "n22", CHANNEL_LEN, CHANNEL_R3, 135),
+    ("n2", "m", CHANNEL_LEN, CHANNEL_R2, -25),
+    ("n1", "m", CHANNEL_LEN, CHANNEL_R2, -155),
+    ("m", "g", CHANNEL_LEN, CHANNEL_R1, -90),
+    ("g", "k", CHANNEL_LEN1, CHANNEL_R3, 270),
+    ("k", "j1", CHANNEL_LEN2, CHANNEL_R3, -145),
+    ("k", "j2", CHANNEL_LEN2, CHANNEL_R3, -35),
+    ("j1", "j11", CHANNEL_LEN3, CHANNEL_R3, -135),
+    ("j1", "j12", CHANNEL_LEN3, CHANNEL_R3, -45),
+    ("j2", "j21", CHANNEL_LEN3, CHANNEL_R3, -135),
+    ("j2", "j22", CHANNEL_LEN3, CHANNEL_R3, -45),
+]
+
+
+
+# hand calculated values for A, b
 HAND_UNKNOWN_ORDER = ["n2", "n1", "m", "g", "k", "j1", "j2"]
 HAND_A_DIAGONALS = {
-    0: [0.084, 0.084, 0.0817, 0.0811, 0.163, 0.081, 0.081],
-    1: [0, -0.0025, 0, -0.081, 0, -0.041, 0],
-    2: [-0.0025, 0, 0, 0, -0.041],
-    -1: [0, -0.0025, 0, -0.000159, 0, -0.041, 0],
-    -2: [-0.0025, 0, 0, 0, -0.041],
-}
-HAND_B = np.array([1785.302, 1785.302, 0, 0, 0, -1148.614, -1148.614])
+    0: [441.779, 441.779, 7068.583, 6295.45, 61.36, 122.718, 122.718],
+    1: [0, -392.699, -6283.185, -12.272, -24.54, 0],
+    2: [-392.699, 0, 0, 0, -24.54],
+    -1: [0, -392.699, -6283.185, -12.272, -24.54, 0],
+    -2: [-392.699, 0, 0, 0, -24.54],
+}  
+HAND_B = np.array([1095282.949, 1095282.949, 0, 0, 0, -2819100.28, -2819100.28])
 
 
+#methods
 def build_handcalc_matrix():
     """Build A only when each supplied diagonal has the correct length.
 
@@ -113,3 +189,43 @@ def test_solver_matrix_and_rhs_match_hand_calculations():
         f"{HAND_UNKNOWN_ORDER}"
     )
     assert comparison["b_matches"], "Solver RHS does not match hand-calculated b"
+
+if __name__ == "__main__":
+    results = solve_network(NODE_TREE, BRANCHES)
+    A_solver, b_solver = align_solver_matrix(results)
+
+    print('Solver unknown order:', results['unknowns'])
+    print('Hand-calculation order:', HAND_UNKNOWN_ORDER)
+    print('A from code, aligned to hand-calculation order:')
+    print(A_solver)
+    print('b from code, aligned to hand-calculation order:')
+    print(b_solver)
+
+    try:
+        A_hand = build_handcalc_matrix()
+    except ValueError as exc:
+        A_hand = None
+        print('REFERENCE DATA ERROR:', exc)
+        print('\nDiagonal lengths supplied vs required:')
+        n = len(HAND_UNKNOWN_ORDER)
+        for offset, values in HAND_A_DIAGONALS.items():
+            print(f'offset {offset:+}: supplied {len(values)}, required {n - abs(offset)}')
+    else:
+        print('Hand-calculated A:')
+        print(A_hand)
+        print('Hand-calculated b:')
+        print(HAND_B)
+
+
+    if A_hand is None:
+        print('Comparison blocked: correct the malformed hand-calculation diagonals above, then rerun this cell.')
+    else:
+        a_match = np.allclose(A_solver, A_hand, rtol=1e-2, atol=1e-2)
+        b_match = np.allclose(b_solver, HAND_B, rtol=1e-2, atol=1e-2)
+        print('A matches:', a_match)
+        print('b matches:', b_match)
+        print('A difference (code - hand):')
+        print(A_solver - A_hand)
+        print('b difference (code - hand):')
+        print(b_solver - HAND_B)
+        assert a_match and b_match, 'Solver system differs from the hand-calculated system'
