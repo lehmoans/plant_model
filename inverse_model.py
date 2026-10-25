@@ -267,28 +267,25 @@ def plot_flow_structure(results: dict[str, Any]) -> None:
 
 
 def plot_friction_structure(results: dict[str, Any]) -> None:
-    """Plot viscous frictional dissipation in each branch.
+    """Plot geometry-based friction f = 8*MU*L/(4*pi*r^4).
 
-    Line width is proportional to R * Q^2, the rate at which mechanical
-    energy is dissipated by viscous friction. The smallest nonzero branch
-    dissipation sets FRICTION_MIN_WIDTH; zero-flow branches remain visible
-    at the minimum line width.
+    Line width is normalized to the smallest friction coefficient in the
+    network. This plot uses only viscosity and branch geometry, with no
+    association with flow rate, pressure, or power.
     """
     branches = results["branches"]
     positions = results["positions"]
     friction_values = [
-        branch["viscous_power"]
+        8.0 * MU * branch["length"] / (4.0 * math.pi * branch["radius"]**4)
         for branch in branches
-        if branch["viscous_power"] > 0.0
     ]
     reference_friction = min(friction_values) if friction_values else 0.0
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    for branch in branches:
+    for branch, friction in zip(branches, friction_values):
         a, b = branch["start"], branch["end"]
         xa, za = positions[a]
         xb, zb = positions[b]
-        friction = branch["viscous_power"]
 
         if reference_friction > 0.0:
             width = FRICTION_MIN_WIDTH * friction / reference_friction
@@ -305,7 +302,7 @@ def plot_friction_structure(results: dict[str, Any]) -> None:
         )
 
     _draw_nodes(ax, positions)
-    _finish_network_axes(ax, "Plant Network — Viscous Frictional Dissipation")
+    _finish_network_axes(ax, "Plant Network — Geometric Friction Coefficient")
     fig.tight_layout()
 
 def plot_results(results: dict[str, Any]) -> None:
