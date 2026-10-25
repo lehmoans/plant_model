@@ -43,3 +43,5 @@ The initial scope is deliberately simplified: water is treated as an incompressi
 4. **Validate each step:** compare code against hand calculations and analytical cases, then add complexity only when the simpler model is understood and checked.
 
 The aim is not merely to produce a working result. The equations, assumptions, numerical implementation, and validation should remain understandable enough that each model can be explained and independently checked.
+
+Work was completed using Chatgpt, massive help with understanding theory and code implementation. 
