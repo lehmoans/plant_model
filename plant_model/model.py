@@ -359,6 +359,80 @@ def plot_flow_results(results: dict[str, Any]) -> None:
     plt.show()
 
 
+
+def plot_hydraulic_resistance_network(results: dict[str, Any]) -> None:
+    """Plot the network with branch colour and width representing resistance."""
+    branches = results["branches"]
+    positions = results["positions"]
+    values = np.asarray(results["resistances"], dtype=float)
+    if values.size == 0 or np.any(values <= 0.0):
+        raise ValueError("All branches must have positive hydraulic resistance.")
+
+    logs = np.log10(values)
+    low, high = float(logs.min()), float(logs.max())
+    norm = plt.Normalize(low, high if high > low else low + 1.0)
+    cmap = plt.get_cmap("viridis")
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    for (a, b, *_), value, log_value in zip(branches, values, logs):
+        xa, za = positions[a]
+        xb, zb = positions[b]
+        fraction = 0.0 if high == low else (log_value - low) / (high - low)
+        ax.plot([xa, xb], [za, zb], color=cmap(norm(log_value)),
+                linewidth=1.2 + 3.0 * fraction, solid_capstyle="round", zorder=1)
+
+    top_indices = np.argsort(values)[-min(5, len(values)):]
+    for idx in top_indices:
+        a, b, *_ = branches[int(idx)]
+        xa, za = positions[a]
+        xb, zb = positions[b]
+        ax.annotate(f"{a}–{b}", ((xa + xb) / 2, (za + zb) / 2),
+                    xytext=(3, 5), textcoords="offset points", fontsize=8,
+                    bbox={"boxstyle": "round,pad=0.2", "fc": "white",
+                          "alpha": 0.85, "ec": "none"})
+
+    _draw_nodes(ax, positions)
+    scalar = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
+    scalar.set_array([])
+    fig.colorbar(scalar, ax=ax, pad=0.02).set_label(
+        r"Hydraulic resistance $R_i$ (Pa s/m$^3$), log scale"
+    )
+    ax.set_title("Plant Network — Hydraulic Resistance by Branch")
+    ax.set_xlabel("Horizontal position (m)")
+    ax.set_ylabel("Vertical position (m)")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.grid(True, alpha=0.25)
+    fig.tight_layout()
+
+
+def plot_hydraulic_resistance_ranking(results: dict[str, Any]) -> None:
+    """Rank branches from lowest to highest hydraulic resistance."""
+    branches = results["branches"]
+    values = np.asarray(results["resistances"], dtype=float)
+    labels = [f"{a} → {b}" for a, b, *_ in branches]
+    order = np.argsort(values)
+    values = values[order]
+    labels = [labels[i] for i in order]
+
+    fig, ax = plt.subplots(figsize=(10, max(5.0, 0.34 * len(labels))))
+    y = np.arange(len(labels))
+    bars = ax.barh(y, values, color=plt.get_cmap("viridis")(
+        np.linspace(0.15, 0.9, len(labels))))
+    ax.set_yticks(y, labels)
+    ax.set_xlabel(r"Hydraulic resistance $R_i$ (Pa s/m$^3$)")
+    ax.set_title("Branch Hydraulic Resistance — Lowest to Highest")
+    ax.set_xscale("log")
+    ax.grid(axis="x", alpha=0.25)
+    ax.set_axisbelow(True)
+    ax.invert_yaxis()
+    for bar, value in zip(bars, values):
+        ax.annotate(f"{value:.2e}", (value, bar.get_y() + bar.get_height()/2),
+                    xytext=(5, 0), textcoords="offset points",
+                    va="center", fontsize=8)
+    fig.tight_layout()
+
+
+
 def main() -> None:
     results = solve_network()
     nodes = results["nodes"]
@@ -400,6 +474,9 @@ def main() -> None:
         print("All internal junctions satisfy mass conservation within tolerance.")
 
     plot_flow_results(results)
+    plot_hydraulic_resistance_network(results)
+    plot_hydraulic_resistance_ranking(results)
+    plt.show()
 
 
 if __name__ == "__main__":

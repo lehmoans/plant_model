@@ -100,16 +100,15 @@ The geometry is a 2D schematic of the plant-inspired network. The calculated ver
 
 For steady, fully developed laminar flow in a rigid circular pipe, the Hagen–Poiseuille relation gives
 
-\[
+```math
 R_i = \frac{8\mu L_i}{\pi r_i^4}
-\]
-
+```
 where:
 
-- \(R_i\) is branch hydraulic resistance in Pa·s/m³;
-- \(\mu\) is dynamic viscosity in Pa·s;
-- \(L_i\) is branch length in metres;
-- \(r_i\) is internal radius in metres.
+- $R_i$ is branch hydraulic resistance in Pa·s/m³;
+- $\mu$ is dynamic viscosity in Pa·s;
+- $L_i$ is branch length in metres;
+- $r_i$ is internal radius in metres.
 
 Resistance grows linearly with length and with the inverse fourth power of radius. Consequently, small changes in radius can have a large effect on the network solution.
 
@@ -117,84 +116,74 @@ Resistance grows linearly with length and with the inverse fourth power of radiu
 
 The network uses hydraulic potential
 
-\[
+```math
 \phi_i = p_i + \rho g z_i
-\]
+```
+where $p_i$ is pressure, $z_i$ is elevation, $\rho$ is fluid density, and $g$ is gravitational acceleration.
 
-where \(p_i\) is pressure, \(z_i\) is elevation, \(\rho\) is fluid density, and \(g\) is gravitational acceleration.
+For a branch directed from node $a$ to node $b$, the signed flow is
 
-For a branch directed from node \(a\) to node \(b\), the signed flow is
-
-\[
+```math
 Q_{a\to b} = \frac{\phi_a-\phi_b}{R_{ab}}
-\]
-
+```
 Positive flow follows the branch's declared direction. Negative flow means flow is in the opposite direction.
 
 Equivalently, the potential difference accounts for both pressure and elevation:
 
-\[
+```math
 \phi_a-\phi_b = (p_a-p_b) - \rho g(z_b-z_a)
-\]
-
+```
 This is why a pressure difference alone is not sufficient to describe the driving potential when the endpoints have different elevations.
 
 ### 3. Mass conservation at junctions
 
-For each internal junction \(i\), steady flow requires
+For each internal junction $i$, steady flow requires
 
-\[
+```math
 \sum_j Q_{j\to i} = 0
-\]
-
+```
 or equivalently, the signed sum of flows leaving the junction is zero. The solvers assemble a linear conductance matrix from each branch resistance and enforce this condition at unknown-pressure junctions.
 
 ### 4. Viscous power
 
-The rate at which mechanical energy is dissipated by viscous resistance in branch \(i\) is
+The rate at which mechanical energy is dissipated by viscous resistance in branch $i$ is
 
-\[
+```math
 P_{\mathrm{viscous},i}=R_i Q_i^2
-\]
-
+```
 and for the whole network,
 
-\[
+```math
 P_{\mathrm{viscous}}=\sum_i R_i Q_i^2
-\]
-
+```
 This contribution is non-negative regardless of the direction of flow.
 
 ### 5. Gravitational potential-energy rate
 
-For signed flow \(Q_i\) in the declared direction from \(a\) to \(b\), with \(\Delta z_i=z_b-z_a\),
+For signed flow $Q_i$ in the declared direction from $a$ to $b$, with $\Delta z_i=z_b-z_a$,
 
-\[
+```math
 P_{\mathrm{gravity},i}=\rho g Q_i\Delta z_i
-\]
-
+```
 The signed network contribution is
 
-\[
+```math
 P_{\mathrm{gravity}}=\sum_i \rho g Q_i\Delta z_i
-\]
-
+```
 Upward transport contributes positively; downward transport can contribute negatively. Using signed branch flows makes the expression consistent when the actual flow opposes the declared branch direction.
 
 ### 6. Total mechanical power and energy
 
 The inverse model reports the steady mechanical power requirement as
 
-\[
+```math
 P_{\mathrm{net}}=P_{\mathrm{viscous}}+P_{\mathrm{gravity}}
-\]
+```
+For a constant steady power over duration $T$,
 
-For a constant steady power over duration \(T\),
-
-\[
+```math
 E=P T
-\]
-
+```
 The report prints viscous, gravitational, and net mechanical power and the corresponding energy over the selected duration.
 
 **Interpretation:** this is a mechanical hydraulic-energy accounting for the current idealized network. It is not a prediction of biochemical energy expenditure or metabolic efficiency. Those would require a biological source/transport model and additional assumptions.
@@ -238,7 +227,7 @@ Run `inverse_model.py` to prescribe leaf uptake and solve the corresponding netw
 - The four root tips are `j11`, `j12`, `j21`, and `j22`.
 - Internal junction potentials and leaf-tip pressures are solved rather than fixed.
 
-The total prescribed leaf uptake at the default setting is \(4\times10^{-9}\,\mathrm{m^3/s}\).
+The total prescribed leaf uptake at the default setting is $4\times10^{-9}\,\mathrm{m^3/s}$.
 
 ### Method
 
@@ -264,7 +253,7 @@ The console report includes solved leaf pressures, flow and power per branch, to
 
 The forward model currently marks both root tips and leaf tips as pressure boundaries. The inverse model instead uses root-tip pressure boundaries and prescribed leaf flows. This difference is intentional: in a passive network, specifying both pressure and flow independently at the same terminal generally overconstrains the problem.
 
-If the intended biological scenario requires both root and leaf pressures to remain at a common reference pressure while a nonzero target flow is maintained, the model will need explicit active pressure sources/pumps or another specified active mechanism. A zero gauge pressure does not mean zero hydraulic potential at every elevation, because \(\phi=p+\rho gz\).
+If the intended biological scenario requires both root and leaf pressures to remain at a common reference pressure while a nonzero target flow is maintained, the model will need explicit active pressure sources/pumps or another specified active mechanism. A zero gauge pressure does not mean zero hydraulic potential at every elevation, because $\phi=p+\rho gz$.
 
 ## Numerical stability
 
@@ -272,22 +261,19 @@ The inverse model solves in hydraulic potential relative to the common root pote
 
 This matters because
 
-\[
+```math
 Q=\frac{\phi_a-\phi_b}{R}
-\]
+```
+can be sensitive to floating-point cancellation when $\phi_a$ and $\phi_b$ are large and nearly equal. Defining
 
-can be sensitive to floating-point cancellation when \(\phi_a\) and \(\phi_b\) are large and nearly equal. Defining
-
-\[
+```math
 \phi_i'=\phi_i-\phi_{\mathrm{ref}}
-\]
-
+```
 preserves potential differences mathematically:
 
-\[
+```math
 \phi_a'-\phi_b'=\phi_a-\phi_b
-\]
-
+```
 and can improve numerical behavior when the equations are solved consistently in the shifted reference. This is a change of reference, not a change in physical pressure or gravity.
 
 The inverse model also reports mass-balance error so numerical results can be checked rather than judged by plots alone. Increasing `Q_MIN` is not a substitute for a numerically stable formulation; it changes the physical demand being simulated.
@@ -300,7 +286,7 @@ The inverse model produces three figures:
 2. **Hydraulic resistance network:** each branch is colored by resistance using a logarithmic color mapping; line thickness also increases with resistance. Only the five highest-resistance branches receive text labels.
 3. **Ranked hydraulic resistance:** a horizontal bar chart lists all branches from lowest to highest resistance on a logarithmic axis, with numeric values annotated.
 
-The resistance visualizations use the computed branch resistance \(R_i=8\mu L_i/(\pi r_i^4)\), not a separate dimensionless friction factor. High resistance identifies a branch that strongly opposes flow for a given potential difference; it does not by itself establish that the branch dissipates the most power. Viscous power also depends on the flow through the branch, \(R_iQ_i^2\).
+The resistance visualizations use the computed branch resistance $R_i=8\mu L_i/(\pi r_i^4)$, not a separate dimensionless friction factor. High resistance identifies a branch that strongly opposes flow for a given potential difference; it does not by itself establish that the branch dissipates the most power. Viscous power also depends on the flow through the branch, $R_iQ_i^2$.
 
 ## Running the models
 
@@ -335,7 +321,7 @@ Change `Q_MIN` in `inverse_model.py` to explore other prescribed leaf-flow requi
 - Independently test junction residuals, not only the total root-versus-leaf balance.
 - Compare simple one-pipe and small-network cases with hand calculations.
 - Test sensitivity to radius, length, viscosity, elevation, and `Q_MIN`.
-- Verify expected scaling for this linear fixed-resistance model: scaling all prescribed flows by a factor \(c\) scales flows and viscous power by \(c\) and \(c^2\), respectively; gravitational power scales linearly with flow for fixed geometry.
+- Verify expected scaling for this linear fixed-resistance model: scaling all prescribed flows by a factor $c$ scales flows and viscous power by $c$ and $c^2$, respectively; gravitational power scales linearly with flow for fixed geometry.
 - Check energy accounting against the boundary mechanical-energy balance, especially when changing the topology, elevations, or boundary conditions.
 - Add automated regression tests for matrix assembly, flow signs, conservation, and the resistance calculation.
 
