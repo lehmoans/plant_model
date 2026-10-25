@@ -148,7 +148,7 @@ def solve_for_minimum_leaf_flows(
     total_gravity_power = 0.0
     for (a, b, length, radius, theta), resistance in zip(BRANCHES, branch_resistances):
         # Positive Q follows the declared BRANCHES direction a -> b.
-        q = (phi[a] - phi[b]) / resistance
+        q = (relative_phi[a] - relative_phi[b]) / resistance
         delta_z = positions[b][1] - positions[a][1]
         viscous_power = resistance * q**2
         gravity_power = RHO * G * q * delta_z
